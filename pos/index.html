@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atom POS System</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+    <button class="nav-btn active" onclick="showSection('products',this)">Products</button>
+    <button class="nav-btn" onclick="showSection('cart',this)">Cart (<span id="cartBadge">0</span>)</button>
+    <button class="nav-btn" onclick="showSection('orders',this)">Sales</button>
+    <button class="nav-btn" onclick="showSection('inventory',this)">Inventory</button>
+    <button class="nav-btn" onclick="openModal()">Add Product</button>
+</header>
+
+<div class="container">
+
+<section id="productsSection">
+<h2>Products</h2>
+<input type="text" id="searchInput" placeholder="Search products...">
+<div id="productsGrid"></div>
+</section>
+
+<section id="cartSection" style="display:none;">
+<h2>Current Sale</h2>
+<div id="cartItems"></div>
+<h3>Total: ₱<span id="total">0</span></h3>
+<button onclick="completeSale()">Complete Sale</button>
+</section>
+
+<section id="ordersSection" style="display:none;">
+<h2>Sales History</h2>
+<div id="ordersList"></div>
+</section>
+
+<section id="inventorySection" style="display:none;">
+<h2>Inventory</h2>
+<button onclick="quickRestock()">Quick Restock Low Stock</button>
+<div id="inventoryList"></div>
+</section>
+
+</div>
+
+<!-- ADD PRODUCT MODAL -->
+<div class="modal" id="productModal">
+<div class="modal-content">
+<h3>Add New Product</h3>
+<input type="text" id="newName" placeholder="Name">
+<input type="text" id="newDesc" placeholder="Description">
+<input type="number" id="newPrice" placeholder="Price">
+<input type="number" id="newStock" placeholder="Stock">
+<input type="file" id="newImage" accept="image/*">
+<button onclick="addNewProduct()">Add</button>
+<button onclick="closeModal()" style="background:#444;">Cancel</button>
+</div>
+</div>
+
+<!-- PRODUCT VIEW MODAL -->
+<div class="modal" id="viewModal">
+<div class="modal-content large">
+<div id="viewContent"></div>
+<button onclick="closeViewModal()" style="background:#444;margin-top:15px;">Close</button>
+</div>
+</div>
+
+<script>
+/* === JAVASCRIPT (UNCHANGED LOGIC) === */
+
+let products = [
+{ id:1, name:"Night Ripper II", price:6500, description:"High-power LED", stock:10, image:"./items/NightRipper2.jpg" },
+{ id:2, name:"Mini Version III", price:3000, description:"Compact", stock:15, image:"./items/MiniVersion3.jpg" },
+{ id:3, name:"Night Ripper Plus", price:5500, description:"Enhanced", stock:8, image:"./items/NightRipperPlus.jpg" },
+{ id:4, name:"Mini Plus", price:4000, description:"Portable", stock:12, image:"./items/MiniPlus.jpg" },
+{ id:5, name:"Quad Beam", price:7500, description:"Multi-beam", stock:5, image:"./items/QuadBeam.jpg" },
+{ id:6, name:"Mini Pod", price:3000, description:"Efficient", stock:20, image:"./items/MiniPod.jpg" }
+];
+
+let cart = {};
+let orders = [];
+
+function showSection(section,btn){
+document.querySelectorAll("section").forEach(s=>s.style.display="none");
+document.getElementById(section+"Section").style.display="block";
+document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("active"));
+if(btn) btn.classList.add("active");
+}
+
+function displayProducts(list=products){
+productsGrid.innerHTML=list.map(p=>`
+<div class="product-card" onclick="openViewModal(${p.id})">
+<img src="${p.image}">
+<h3>${p.name}</h3>
+<p>₱${p.price}</p>
+<p class="${p.stock<=5?'low-stock':''}">Stock: ${p.stock}</p>
+<button onclick="event.stopPropagation(); addToCart(${p.id})">Add to Cart</button>
+</div>`).join("");
+}
+displayProducts();
+
+searchInput.addEventListener("input",()=>{
+const q=searchInput.value.toLowerCase();
+displayProducts(products.filter(p=>p.name.toLowerCase().includes(q)||p.description.toLowerCase().includes(q)));
+});
+
+function openViewModal(id){
+const p=products.find(x=>x.id===id);
+
+viewContent.innerHTML=`
+<img src="${p.image}">
+<div>
+<h2>${p.name}</h2>
+<p><strong>Price:</strong> ₱${p.price}</p>
+<p>${p.description}</p>
+<p>Stock: ${p.stock}</p>
+<button onclick="addToCart(${p.id}); closeViewModal();">Add to Cart</button>
+</div>`;
+
+viewModal.style.display="flex";
+}
+
+function closeViewModal(){
+viewModal.style.display="none";
+}
+
+function addToCart(id){
+const p=products.find(x=>x.id===id);
+if(p.stock<=0) return alert("Out of stock!");
+if(cart[id]) cart[id].qty++;
+else cart[id]={...p,qty:1};
+p.stock--;
+updateCart();
+displayProducts();
+displayInventory();
+}
+
+function updateCart(){
+const items=Object.values(cart);
+cartItems.innerHTML=items.length?items.map(i=>`
+<div class="cart-item">
+${i.name} x ${i.qty} = ₱${i.price*i.qty}
+<button onclick="changeQty(${i.id},-1)">-</button>
+<button onclick="changeQty(${i.id},1)">+</button>
+<button onclick="removeItem(${i.id})">Remove</button>
+</div>`).join(""):"Cart empty";
+total.textContent=items.reduce((s,i)=>s+i.price*i.qty,0);
+cartBadge.textContent=items.reduce((s,i)=>s+i.qty,0);
+}
+
+function changeQty(id,change){
+const p=products.find(x=>x.id===id);
+if(!cart[id]) return;
+if(change===1 && p.stock<=0) return alert("No more stock!");
+cart[id].qty+=change;
+p.stock-=change;
+if(cart[id].qty<=0) delete cart[id];
+updateCart();
+displayProducts();
+displayInventory();
+}
+
+function removeItem(id){
+const p=products.find(x=>x.id===id);
+if(cart[id]) p.stock+=cart[id].qty;
+delete cart[id];
+updateCart();
+displayProducts();
+displayInventory();
+}
+
+function completeSale(){
+if(!Object.values(cart).length) return alert("Cart empty!");
+orders.push({id:"REC-"+Date.now(),items:Object.values(cart)});
+cart={};
+updateCart();
+alert("Sale completed!");
+}
+
+function displayInventory(){
+inventoryList.innerHTML=products.map(p=>`<p>${p.name} - Stock: ${p.stock}</p>`).join("");
+}
+displayInventory();
+
+function quickRestock(){
+products.forEach(p=>{ if(p.stock<=5) p.stock+=10; });
+displayProducts();
+displayInventory();
+}
+
+function openModal(){ productModal.style.display="flex"; }
+function closeModal(){ productModal.style.display="none"; }
+
+function addNewProduct(){
+const name=newName.value.trim();
+const desc=newDesc.value.trim();
+const price=parseFloat(newPrice.value);
+const stock=parseInt(newStock.value);
+const file=newImage.files[0];
+if(!name||!desc||!price||!stock||!file) return alert("Fill all fields!");
+const reader=new FileReader();
+reader.onload=e=>{
+const id=products.length?products[products.length-1].id+1:1;
+products.push({id,name,description:desc,price,stock,image:e.target.result});
+displayProducts();
+displayInventory();
+closeModal();
+};
+reader.readAsDataURL(file);
+}
+</script>
+
+</body>
+</html>
